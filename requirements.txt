@@ -1,0 +1,14 @@
+langgraph
+langchain
+langchain-google-genai
+langchain_groq
+langchain-tavily
+requests
+lxml
+supabase
+SQLAlchemy
+pathlib
+beautifulsoup4
+fastapi[standard]
+uvicorn
+psycopg[binary]
