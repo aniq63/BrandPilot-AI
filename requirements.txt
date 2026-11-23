@@ -13,3 +13,5 @@ fastapi[standard]
 uvicorn
 psycopg[binary]
 alembic
+PyJWT
+langgraph-checkpoint-postgres

@@ -8,7 +8,8 @@ from sqlalchemy import (
     Text,
     DateTime,
     ForeignKey,
-    JSON
+    JSON,
+    text
 )
 
 from sqlalchemy.orm import (
@@ -76,6 +77,19 @@ class StartupMarketingData(Base):
         Integer,
         primary_key=True,
         index=True
+    )
+
+    thread_id: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        index=True
+    )
+
+    workflow_status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="pending",
+        server_default=text("'pending'")
     )
 
     # Foreign Key: Each startup belongs to one user
@@ -174,12 +188,12 @@ class StartupMarketingData(Base):
 
     campaign_duration: Mapped[Optional[str]] = mapped_column(
         String(255),
-        nullable=False
+        nullable=True
     )
 
     social_media_accounts: Mapped[Optional[dict]] = mapped_column(
         JSON,
-        nullable=False
+        nullable=True
     )
 
     brand_logo: Mapped[Optional[str]] = mapped_column(
