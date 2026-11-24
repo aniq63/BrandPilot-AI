@@ -9,10 +9,12 @@ from database.crud import (
     create_startup_data,
     get_startup_data,
     list_user_projects,
+    update_workflow_status,
 )
-from database.models import StartupMarketingData, User
+from database.models import Campaign, StartupMarketingData, User
 from src.routes.deps import get_current_user, get_db
-from src.routes.runner import resume_workflow, start_workflow
+from src.routes.runner import resume_workflow, retry_workflow, start_workflow
+from src.utilis.logging import log_calls
 from src.routes.schemas import (
     ReviewRequest,
     RunAcceptedResponse,
@@ -24,6 +26,7 @@ from src.routes.schemas import (
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
+@log_calls
 def _owned_project(
     db: Session,
     project_id: int,
@@ -51,6 +54,7 @@ def _outputs(project: StartupMarketingData) -> dict[str, Any]:
     response_model=RunAcceptedResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@log_calls
 def submit_startup_data(
     payload: StartupDataRequest,
     background_tasks: BackgroundTasks,
@@ -84,6 +88,7 @@ def submit_startup_data(
 
 
 @router.get("/runs", response_model=list[RunSummaryResponse])
+@log_calls
 def list_runs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -101,17 +106,61 @@ def list_runs(
 
 
 @router.get("/runs/{project_id}", response_model=RunStatusResponse)
+@log_calls
 def get_run(
     project_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     project = _owned_project(db, project_id, current_user.id)
+    campaign = (
+        db.query(Campaign)
+        .filter(Campaign.project_id == project.id)
+        .order_by(Campaign.id.desc())
+        .first()
+    )
     return RunStatusResponse(
         project_id=project.id,
         thread_id=project.thread_id,
         workflow_status=project.workflow_status,
         outputs=_outputs(project),
+        current_agents=project.current_agents or [],
+        campaign_id=campaign.id if campaign else None,
+    )
+
+
+@router.post(
+    "/runs/{project_id}/retry",
+    response_model=RunAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@log_calls
+def retry_run(
+    project_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = _owned_project(db, project_id, current_user.id)
+    if project.workflow_status != "failed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only failed projects can be retried",
+        )
+
+    update_workflow_status(db, project.id, "running")
+    background_tasks.add_task(
+        retry_workflow,
+        project.id,
+        project.thread_id,
+        current_user.id,
+    )
+
+    return RunAcceptedResponse(
+        project_id=project.id,
+        thread_id=project.thread_id,
+        workflow_status="running",
+        message="Failed workflow is restarting from the last checkpoint.",
     )
 
 
@@ -120,6 +169,7 @@ def get_run(
     response_model=RunAcceptedResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@log_calls
 def review_strategy(
     project_id: int,
     payload: ReviewRequest,

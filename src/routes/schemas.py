@@ -29,10 +29,35 @@ class TokenResponse(BaseModel):
 
 
 class SocialMediaAccountRequest(BaseModel):
-    platform: str
-    username: str
-    profile_url: str
+    platform: str = Field(min_length=1, max_length=100)
+    username: str = Field(min_length=1, max_length=255)
+    profile_url: str = Field(min_length=1, max_length=500)
     account_type: Optional[str] = None
+    connected_account_id: Optional[str] = None
+    platform_account_id: Optional[str] = None
+    connection_status: Literal["connected", "pending", "disconnected"] = "pending"
+    publishing_enabled: bool = False
+    publishing_scopes: List[str] = Field(default_factory=list)
+    token_expires_at: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_publishing_details(self):
+        if not self.publishing_enabled:
+            return self
+        missing = []
+        if self.connection_status != "connected":
+            missing.append("connection_status must be connected")
+        if not self.connected_account_id:
+            missing.append("connected_account_id")
+        if not self.platform_account_id:
+            missing.append("platform_account_id")
+        if not self.publishing_scopes:
+            missing.append("publishing_scopes")
+        if missing:
+            raise ValueError(
+                "Publishing-enabled accounts require: " + ", ".join(missing)
+            )
+        return self
 
 
 class StartupDataRequest(BaseModel):
@@ -75,6 +100,8 @@ class RunStatusResponse(BaseModel):
     thread_id: Optional[str]
     workflow_status: str
     outputs: dict
+    current_agents: List[str] = []
+    campaign_id: Optional[int] = None
 
 
 class RunSummaryResponse(BaseModel):
@@ -93,3 +120,40 @@ class ReviewRequest(BaseModel):
         if self.decision != "approve" and not self.feedback:
             raise ValueError("feedback is required when requesting a revision")
         return self
+
+
+class AssetConfirmationItem(BaseModel):
+    assignment_id: int = Field(gt=0)
+    action: Literal["accepted", "rejected"]
+    asset_id: Optional[int] = Field(default=None, gt=0)
+    requirement_id: Optional[int] = Field(default=None, gt=0)
+    carousel_position: Optional[int] = Field(default=None, ge=0)
+
+
+class AssetConfirmationRequest(BaseModel):
+    confirmations: List[AssetConfirmationItem] = Field(min_length=1)
+
+
+class ManualAssetAssignmentRequest(BaseModel):
+    post_id: int = Field(gt=0)
+    asset_id: int = Field(gt=0)
+    requirement_id: Optional[int] = Field(default=None, gt=0)
+    carousel_position: Optional[int] = Field(default=None, ge=0)
+
+
+class PostReviewRequest(BaseModel):
+    decision: Literal["approve", "revision"]
+    note: Optional[str] = None
+
+    @model_validator(mode="after")
+    def note_required_for_revision(self):
+        if self.decision == "revision" and not self.note:
+            raise ValueError("note is required when requesting a revision")
+        return self
+
+
+class CampaignActionResponse(BaseModel):
+    campaign_id: Optional[int] = None
+    status: str
+    message: str
+    count: Optional[int] = None

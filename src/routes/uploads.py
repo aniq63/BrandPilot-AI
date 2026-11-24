@@ -9,11 +9,13 @@ from database.models import User
 from src.routes.deps import get_current_user, get_db
 from src.routes.schemas import BrandUploadResponse
 from src.services.supabase_storage import upload_brand_image
+from src.utilis.logging import logger, log_calls
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 
 @router.post("/brand", response_model=BrandUploadResponse)
+@log_calls
 async def upload_brand_media(
     brand_logo: Annotated[Optional[UploadFile], File()] = None,
     brand_images: Annotated[Optional[list[UploadFile]], File()] = None,
@@ -65,6 +67,7 @@ async def upload_brand_media(
             asset_urls.append(url)
 
     except ValueError as exc:
+        logger.warning("Brand media upload rejected: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),

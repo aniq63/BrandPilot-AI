@@ -8,9 +8,12 @@ from src.agents.llm.model import(
     customer_research_llm
 )
 
+from src.services.campaign_service import start_campaign_orchestration
+
 from src.agents.graph.state import StartupMarketingState
 from src.utilis.web_research import perform_web_research
 from src.utilis.extract_url_info import extract_startup_info
+from src.utilis.logging import logger, log_calls
 
 from src.config.prompts import (
     STARTUP_ANALYSIS_PROMPT,
@@ -21,8 +24,33 @@ from src.config.prompts import (
 )
 
 
+def _response_text(response) -> str:
+    content = getattr(response, "content", response)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                else:
+                    parts.append(json.dumps(item, ensure_ascii=False))
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part)
+    if isinstance(content, dict):
+        text = content.get("text")
+        return text if isinstance(text, str) else json.dumps(content, ensure_ascii=False)
+    return str(content)
+
+
 # ============================= STARTUP ANALYSIS NODE =============================
 
+@log_calls
 def startup_analysis(state: StartupMarketingState) -> dict:
 
     # Step 1: Extract information from the startup website
@@ -55,11 +83,12 @@ def startup_analysis(state: StartupMarketingState) -> dict:
 
     # Step 5: Return the analysis to LangGraph state
     return {
-        "agent_startup_analysis": response.content
+        "agent_startup_analysis": _response_text(response)
     }
 
 
 # ============================= MARKET RESEARCH NODE =============================
+@log_calls
 def market_research(state: StartupMarketingState) -> dict:
 
     # 1. Collect startup context
@@ -109,11 +138,12 @@ def market_research(state: StartupMarketingState) -> dict:
 
     # 6. Update graph state
     return {
-        "agent_market_research": response.content
+        "agent_market_research": _response_text(response)
     }
 
 
 # ============================= CUSTOMER RESEARCH NODE =============================
+@log_calls
 def customer_research(state: StartupMarketingState) -> dict:
 
     # 1. Collect startup context
@@ -159,15 +189,16 @@ def customer_research(state: StartupMarketingState) -> dict:
 
     # 5. Update graph state
     return {
-        "agent_customer_research": response.content
+        "agent_customer_research": _response_text(response)
     }
 
 # ============================= SOCIAL MEDIA STARTEGIST NODE =============================
 
 
+@log_calls
 def social_media_strategy_node(state: StartupMarketingState):
 
-    print("Generating Social Media Marketing Strategy...")
+    logger.info("Generating social media marketing strategy")
 
     research_context = {
         "startup_information": {
@@ -209,9 +240,10 @@ def social_media_strategy_node(state: StartupMarketingState):
 
 
 # ============================= Social Media Strategy Optimization Agent NODE =============================
+@log_calls
 def strategy_optimization_node(state: StartupMarketingState):
 
-    print("Optimizing Social Media Strategy...")
+    logger.info("Optimizing social media strategy")
 
     optimization_context = {
 
@@ -251,7 +283,7 @@ def strategy_optimization_node(state: StartupMarketingState):
 
     response = strategy_optimization_model.invoke(prompt)
 
-    print("Strategy successfully optimized.")
+    logger.info("Strategy successfully optimized")
 
     return {
         "agent_social_media_strategy": response.model_dump()
@@ -263,9 +295,10 @@ def strategy_optimization_node(state: StartupMarketingState):
 from langgraph.types import interrupt, Command
 
 
+@log_calls
 def strategy_review_node(state: StartupMarketingState):
 
-    print("Waiting for Founder Strategy Review...")
+    logger.info("Waiting for founder strategy review")
 
     review_response = interrupt({
         "message": "Please review the proposed social media strategy.",
@@ -280,7 +313,7 @@ def strategy_review_node(state: StartupMarketingState):
 
     if decision == "approve":
 
-        print("Strategy approved by founder.")
+        logger.info("Strategy approved by founder")
 
         return Command(
             update={
@@ -298,7 +331,7 @@ def strategy_review_node(state: StartupMarketingState):
                 "Founder feedback is required when requesting revisions."
             )
 
-        print("Founder requested strategy revisions.")
+        logger.info("Founder requested strategy revisions")
 
         return Command(
             update={
@@ -315,9 +348,14 @@ def strategy_review_node(state: StartupMarketingState):
 
 
 
-# Temporary node: replace with your actual Campaign Orchestrator
+@log_calls
 def campaign_orchestrator_node(state: StartupMarketingState):
 
-    print("Starting Campaign Orchestration...")
+    logger.info("Starting campaign orchestration")
 
-    return {}
+    campaign_id = start_campaign_orchestration(
+        state.get("user_id"),
+        state.get("project_id"),
+    )
+
+    return {"campaign_id": campaign_id}

@@ -1,11 +1,14 @@
 from langchain_tavily import TavilySearch
 
+from src.utilis.logging import logger, log_calls
+
 tavily_search = TavilySearch(
     max_results=3,
     search_depth="basic",
     topic="general"
 )
 
+@log_calls
 def perform_web_research(search_queries: list[str]) -> str:
     """
     Executes multiple Tavily searches and combines their results.
@@ -30,7 +33,7 @@ def perform_web_research(search_queries: list[str]) -> str:
                 })
 
         except Exception as e:
-            print(f"Search failed for '{query}': {e}")
+            logger.warning("Search failed for '%s': %s", query, e)
 
     # Remove duplicate sources
     unique_results = {}

@@ -6,10 +6,12 @@ from database.connection import get_db
 from database.crud import get_user
 from database.models import User
 from src.security import decode_access_token
+from src.utilis.logging import logger, log_calls
 
 bearer_scheme = HTTPBearer()
 
 
+@log_calls
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
@@ -17,6 +19,7 @@ def get_current_user(
     try:
         user_id = decode_access_token(credentials.credentials)
     except ValueError:
+        logger.warning("Rejected request with invalid access token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -24,6 +27,7 @@ def get_current_user(
 
     user = get_user(db, user_id)
     if user is None:
+        logger.warning("Rejected request for missing user id %s", user_id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User no longer exists",

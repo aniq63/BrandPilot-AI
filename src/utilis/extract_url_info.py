@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse, urldefrag
 import requests
 from bs4 import BeautifulSoup
 
+from src.utilis.logging import logger, log_calls
+
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; StartupInfoBot/1.0)"}
 SKIP_EXT = (".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".zip",
             ".mp4", ".mp3", ".css", ".js", ".ico", ".xml", ".json")
@@ -33,16 +35,18 @@ def _priority(url: str) -> int:
     return 0 if any(w in path for w in PRIORITY_WORDS) else 1
 
 
+@log_calls
 def _fetch(url: str, timeout: int):
     try:
         r = requests.get(url, headers=HEADERS, timeout=timeout)
         if r.status_code == 200 and "text/html" in r.headers.get("Content-Type", ""):
             return r.text
-    except requests.RequestException:
-        pass
+    except requests.RequestException as exc:
+        logger.warning("Request failed for %s: %s", url, exc)
     return None
 
 
+@log_calls
 def _parse_page(html: str, url: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
     raw_text = soup.get_text(" ", strip=True)
@@ -84,6 +88,7 @@ def _parse_page(html: str, url: str) -> dict:
     }
 
 
+@log_calls
 def extract_startup_info(
     website_url: Annotated[str, "The official website URL of the startup."],
     max_pages: Annotated[int, "Maximum number of pages to crawl."] = 25,
@@ -123,6 +128,7 @@ def extract_startup_info(
         time.sleep(delay)
 
     if not pages:
+        logger.warning("Could not fetch any content from %s", website_url)
         return f"Could not fetch any content from {website_url}."
 
     home = pages[0]

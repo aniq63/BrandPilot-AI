@@ -5,6 +5,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client
 
+from src.utilis.logging import logger, log_calls
+
 ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT / ".env")
 
@@ -23,6 +25,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 _bucket_ready = False
 
 
+@log_calls
 def ensure_bucket() -> None:
     global _bucket_ready
     if _bucket_ready:
@@ -30,10 +33,12 @@ def ensure_bucket() -> None:
     try:
         client.storage.get_bucket(BUCKET)
     except Exception:
+        logger.info("Creating public Supabase bucket %s", BUCKET)
         client.storage.create_bucket(BUCKET, options={"public": True})
     _bucket_ready = True
 
 
+@log_calls
 def validate_image(filename: str, content_type: str, size: int) -> None:
     suffix = Path(filename or "").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -44,7 +49,8 @@ def validate_image(filename: str, content_type: str, size: int) -> None:
         raise ValueError("Image must be smaller than 10 MB")
 
 
-def upload_brand_image(
+@log_calls
+def upload_image(
     *,
     user_id: int,
     project_id: int | None,
@@ -52,7 +58,7 @@ def upload_brand_image(
     content: bytes,
     content_type: str,
     folder: str,
-) -> str:
+) -> tuple[str, str]:
     validate_image(filename, content_type, len(content))
     ensure_bucket()
 
@@ -66,4 +72,25 @@ def upload_brand_image(
         content,
         {"content-type": content_type, "upsert": False},
     )
-    return bucket.get_public_url(path)
+    return path, bucket.get_public_url(path)
+
+
+@log_calls
+def upload_brand_image(
+    *,
+    user_id: int,
+    project_id: int | None,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    folder: str,
+) -> str:
+    _, public_url = upload_image(
+        user_id=user_id,
+        project_id=project_id,
+        filename=filename,
+        content=content,
+        content_type=content_type,
+        folder=folder,
+    )
+    return public_url

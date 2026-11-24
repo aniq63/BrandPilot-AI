@@ -50,11 +50,14 @@ class SocialMediaAccount(TypedDict):
     username: str
     profile_url: str
     account_type: Optional[str]
+    connected_account_id: Optional[str]
+    platform_account_id: Optional[str]
+    connection_status: Optional[str]
+    publishing_enabled: Optional[bool]
+    publishing_scopes: Optional[List[str]]
+    token_expires_at: Optional[str]
 
     # Managed by the integration system
-    connection_status: Optional[str]
-    connected_account_id: Optional[str]
-    publishing_enabled: Optional[bool]
     analytics_enabled: Optional[bool]
 
 
@@ -93,7 +96,7 @@ class StartupMarketingState(TypedDict):
 
     social_media_accounts: Annotated[
         Optional[List[SocialMediaAccount]],
-        "Social media accounts supplied by the startup, including platform, username, profile URL, account type, and system-managed connection and permission status."
+        "Social media accounts supplied by the startup, including profile details, publishing connection identifiers, permission scopes, token expiry, and system-managed analytics status."
     ]
 
     brand_logo: Annotated[Optional[str], "The logo image URL or reference to the uploaded brand logo."]
@@ -113,4 +116,9 @@ class StartupMarketingState(TypedDict):
     strategy_feedback: Annotated[
         Optional[str],
         "Founder feedback, requested changes, or revision instructions for the proposed social media strategy."
+    ]
+
+    campaign_id: Annotated[
+        Optional[int],
+        "Campaign created after the founder approves the social media strategy."
     ]

@@ -1,5 +1,7 @@
+import json
 from typing import Any, Optional
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database.models import StartupMarketingData, User
@@ -32,6 +34,43 @@ OUTPUT_COLUMNS = (
     "agent_social_media_strategy",
     "strategy_feedback",
 )
+
+JSON_OUTPUT_COLUMNS = frozenset({"agent_social_media_strategy"})
+
+
+def _serialize_text_output(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                parts.append(text if isinstance(text, str) else json.dumps(item, ensure_ascii=False))
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part)
+    if isinstance(value, dict):
+        text = value.get("text")
+        return text if isinstance(text, str) else json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _serialize_json_output(value: Any) -> Any:
+    if value is None or isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return {"raw": value}
+    return value
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
@@ -118,7 +157,12 @@ def update_agent_outputs(
 
     for column in OUTPUT_COLUMNS:
         if column in outputs:
-            setattr(project, column, outputs[column])
+            value = outputs[column]
+            if column in JSON_OUTPUT_COLUMNS:
+                value = _serialize_json_output(value)
+            else:
+                value = _serialize_text_output(value)
+            setattr(project, column, value)
 
     db.commit()
 
@@ -155,4 +199,15 @@ def update_workflow_status(
     db.query(StartupMarketingData).filter(
         StartupMarketingData.id == project_id
     ).update({"workflow_status": status})
+    db.commit()
+
+
+def update_current_agents(
+    db: Session,
+    project_id: int,
+    current_agents: list[str] | None,
+) -> None:
+    db.query(StartupMarketingData).filter(
+        StartupMarketingData.id == project_id
+    ).update({"current_agents": current_agents})
     db.commit()
